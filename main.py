@@ -22,23 +22,33 @@ class GerenciadorInvestimento:
         cursor.execute(
             "CREATE TABLE IF NOT EXISTS ativos (id INTEGER PRIMARY KEY AUTOINCREMENT, nome TEXT UNIQUE, tipo TEXT CHECK(tipo IN ('Ação', 'Fundo Imobiliário', 'Cripto')))")
         cursor.execute(
-            "CREATE TABLE IF NOT EXISTS transacoes (id INTEGER PRIMARY KEY AUTOINCREMENT, data DATETIME DEFAULT (DATETIME('now', 'localtime')), quantidade DECIMAL, preco_pago DECIMAL, taxas DECIMAL, ativo_ref INTEGER REFERENCES ativos(id))")
+            "CREATE TABLE IF NOT EXISTS transacoes (id INTEGER PRIMARY KEY AUTOINCREMENT, data DATETIME DEFAULT (DATETIME('now', 'localtime')), tipo TEXT CHECK(tipo IN ('Compra', 'Venda')), quantidade DECIMAL, preco_pago DECIMAL, taxas DECIMAL, ativo_ref INTEGER REFERENCES ativos(id))")
         cursor.execute(
             "CREATE TABLE IF NOT EXISTS posicao (ativo INTEGER REFERENCES ativos(id), quantidade DECIMAL, preco_medio DECIMAL)")
         self.conexao.commit()
 
     def registra_ativo(self, nome, tipo):
+
+        # define cursor
         cursor = self.conexao.cursor()
         try:
+
+            # procura ativo pelo nome
             res = cursor.execute(
                 "SELECT * FROM ativos WHERE nome = (?)", (nome,))
+
+            # se não encontrarmos o ativo ele é inserido
             if not res.fetchone():
                 cursor.execute(
                     "INSERT INTO ativos (nome, tipo) VALUES (?, ?)", (nome, tipo))
                 self.conexao.commit()
                 print("Sucesso! Ativo inserido no banco de dados.")
+
+            # se o ativo já existir retorna falha na operação
             else:
                 print("Falha na operação. Ativo já existe no banco de dados.")
+
+        # fallback em caso de erro genérico
         except Exception as e:
             print("Falha ao inserir ativo no banco de dados: ", e)
 
@@ -49,22 +59,21 @@ class GerenciadorInvestimento:
 
         # busca o ativo pelo nome e salva o id
         ativo = cursor.execute(
-            "SELECT * FROM ativos WHERE nome = (?)", (nome_ativo,))
+            "SELECT * FROM ativos WHERE nome = (?)", (str(nome_ativo).upper(),))
         res = ativo.fetchone()
 
         # se o ativo não existir
         if not res:
-            print("Falha na operação: ativo não encontrado.")
+            print("Falha na operação: o ativo deve ser inserido primeiro.")
             return
 
         # FAZENDO TRANSAÇÃO
         # se o ativo existir inserimos a transação
         else:
             id_ativo = res[0]
-
-            parametros = (quantidade, preco, taxas, id_ativo)
+            parametros = (quantidade, preco, "Compra", taxas, id_ativo)
             cursor.execute(
-                "INSERT INTO transacoes (quantidade, preco_pago, taxas, ativo_ref) VALUES (?, ?, ?, ?)", parametros)
+                "INSERT INTO transacoes (quantidade, preco_pago, tipo, taxas, ativo_ref) VALUES (?, ?, ?, ?, ?)", parametros)
             print("Sucesso! Transação realizada com sucesso.")
 
             posicao = cursor.execute(
@@ -92,6 +101,67 @@ class GerenciadorInvestimento:
             # salvamos as alterações no banco de dados
             self.conexao.commit()
 
+    def vender_ativo(self, nome_ativo, quantidade, preco, taxas):
+
+        # cursor
+        cursor = self.conexao.cursor()
+
+        # vamos encontrar o id do ativo pelo nome
+        parametros = (str(nome_ativo).upper(),)
+        ativo = cursor.execute(
+            "SELECT id, nome FROM ativos WHERE nome = (?)", parametros)
+        res = ativo.fetchone()
+
+        # se o ativo não for encontrado
+        if not res:
+            print("Ativo não encontrado.")
+            return
+
+        # se o ativo for encontrado
+        # vamos ver a posição do usuário com o ativo
+        else:
+            id_ativo = res[0]
+            parametros = (id_ativo,)
+            posicao = cursor.execute(
+                "SELECT * FROM posicao WHERE ativo = (?)", parametros)
+            res = posicao.fetchone()
+
+            # se o usuário n tiver o ativo
+            if not res:
+                print("Erro na operação: sem posição nesse ativo")
+                return
+
+            # se tiver
+            else:
+                posicao_usuario = res[1]
+
+                # se o usuario possuir menos ativos do que quer vender
+                if posicao_usuario < quantidade:
+                    print("Erro na operação: ativos insuficientes.")
+                    return
+
+                # se possuir mais
+                else:
+                    # insere transação
+                    parametros = ("Venda", quantidade, preco, taxas, id_ativo)
+                    cursor.execute(
+                        "INSERT INTO transacoes (tipo, quantidade, preco_pago, taxas, ativo_ref) VALUES (?, ?, ?, ?, ?)", parametros)
+                    print("Transação de venda inserida com sucesso!")
+
+                    # atualiza posição
+                    parametros = (quantidade, id_ativo)
+                    print(posicao_usuario - quantidade)
+                    if posicao_usuario - quantidade == 0:
+                        cursor.execute(
+                            "DELETE FROM posicao WHERE ativo = (?)", (id_ativo,))
+                    else:
+                        cursor.execute(
+                            "UPDATE posicao SET quantidade = quantidade - (?) WHERE ativo = (?)", parametros)
+                    print("Posição atualizada com sucesso!")
+
+                    # salva no banco de dados as atualizações
+                    self.conexao.commit()
+
     def calcula_preco_medio(self, qtd_antiga, precom_antigo, qtd_nova, preco_novo, qtd_total):
         precom_novo = ((qtd_antiga * precom_antigo) +
                        (qtd_nova * preco_novo)) / qtd_total
@@ -99,5 +169,6 @@ class GerenciadorInvestimento:
 
 
 gestao = GerenciadorInvestimento()
-gestao.registra_ativo("PETR4", "Ação")
-gestao.comprar_ativo("PETR4", 3, 10, 5)
+# gestao.registra_ativo("PETR4", "Ação")
+# gestao.comprar_ativo("petr4", 10, 10, 5)
+gestao.vender_ativo("PETR4", 2, 2, 3)

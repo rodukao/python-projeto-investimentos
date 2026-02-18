@@ -43,15 +43,15 @@ class GerenciadorInvestimento:
                 cursor.execute(
                     "INSERT INTO ativos (nome, tipo) VALUES (?, ?)", (nome, tipo))
                 self.conexao.commit()
-                print("Sucesso! Ativo inserido no banco de dados.")
+                return "Sucesso! Ativo inserido no banco de dados."
 
             # se o ativo já existir retorna falha na operação
             else:
-                print("Falha na operação. Ativo já existe no banco de dados.")
+                return "Falha na operação. Ativo já existe no banco de dados."
 
         # fallback em caso de erro genérico
         except Exception as e:
-            print("Falha ao inserir ativo no banco de dados: ", e)
+            return "Falha ao inserir ativo no banco de dados: ", e
 
     def comprar_ativo(self, nome_ativo, quantidade, taxas):
 
@@ -200,36 +200,12 @@ class GerenciadorInvestimento:
         extrato['rentabilidade_pct'] = (
             extrato['lucro/prejuizo'] / extrato['total_investido']) * 100
 
-        # # criando a coluna de preço de mercado atual
-        # for ativo in extrato.itertuples():
-        #     try:
-        #         preco_mercado_atual.append(
-        #             yf.Ticker(f"{ativo.nome}.SA").fast_info.last_price)
-        #     except Exception as e:
-        #         print(
-        #             "Não foi possível recuperar o valor atual do ativo. Usando valor médio do banco.")
-        #         preco_mercado_atual.append(ativo.preco_medio)
-
-        # extrato['preco_mercado_atual'] = preco_mercado_atual
-
-        # # criando a coluna de valor atual
-        # for ativo in extrato.itertuples():
-        #     valor_atual.append(ativo.quantidade * ativo.preco_mercado_atual)
-
-        # extrato['valor_atual'] = valor_atual
-
-        # # criando coluna de lucro/prejuizo
-        # for ativo in extrato.itertuples():
-        #     lucro_prejuizo.append(ativo.valor_atual - ativo.total_investido)
-
-        # extrato['lucro/prejuizo'] = lucro_prejuizo
-
         return extrato
 
 
-gestao = GerenciadorInvestimento()
-# gestao.registra_ativo("VALE3", "Ação")
-# gestao.comprar_ativo("VALE3", 10, 0)
+# gestao = GerenciadorInvestimento()
+# gestao.registra_ativo("ITUB4", "Ação")
+# gestao.comprar_ativo("PETR4", 5, 0)
 # gestao.vender_ativo("PETR4", 2, 0)
 # gestao.extrato_consolidado()
-print(gestao.relatorio_performance())
+# gestao.relatorio_performance()

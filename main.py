@@ -1,6 +1,7 @@
 import pandas as pd
 import os
 import sqlite3
+import yfinance as yf
 
 
 class GerenciadorInvestimento:
@@ -52,7 +53,7 @@ class GerenciadorInvestimento:
         except Exception as e:
             print("Falha ao inserir ativo no banco de dados: ", e)
 
-    def comprar_ativo(self, nome_ativo, quantidade, preco, taxas):
+    def comprar_ativo(self, nome_ativo, quantidade, taxas):
 
         # define cursor
         cursor = self.conexao.cursor()
@@ -71,6 +72,7 @@ class GerenciadorInvestimento:
         # se o ativo existir inserimos a transação
         else:
             id_ativo = res[0]
+            preco = yf.Ticker(f"{nome_ativo}.SA").fast_info['last_price']
             parametros = (quantidade, preco, "Compra", taxas, id_ativo)
             cursor.execute(
                 "INSERT INTO transacoes (quantidade, preco_pago, tipo, taxas, ativo_ref) VALUES (?, ?, ?, ?, ?)", parametros)
@@ -101,7 +103,7 @@ class GerenciadorInvestimento:
             # salvamos as alterações no banco de dados
             self.conexao.commit()
 
-    def vender_ativo(self, nome_ativo, quantidade, preco, taxas):
+    def vender_ativo(self, nome_ativo, quantidade, taxas):
 
         # cursor
         cursor = self.conexao.cursor()
@@ -143,6 +145,8 @@ class GerenciadorInvestimento:
                 # se possuir mais
                 else:
                     # insere transação
+                    preco = yf.Ticker(
+                        f"{nome_ativo}.SA").fast_info['last_price']
                     parametros = ("Venda", quantidade, preco, taxas, id_ativo)
                     cursor.execute(
                         "INSERT INTO transacoes (tipo, quantidade, preco_pago, taxas, ativo_ref) VALUES (?, ?, ?, ?, ?)", parametros)
@@ -167,8 +171,65 @@ class GerenciadorInvestimento:
                        (qtd_nova * preco_novo)) / qtd_total
         return precom_novo
 
+    def extrato_consolidado(self):
+        df = pd.read_sql_query(
+            "SELECT nome, tipo, quantidade, preco_medio FROM posicao JOIN ativos ON posicao.ativo = ativos.id", self.conexao)
+        df['total_investido'] = df['quantidade'] * df['preco_medio']
+        return (df)
+
+    def relatorio_performance(self):
+        extrato = self.extrato_consolidado()
+
+        precos_api = []
+
+        for ativo in extrato.itertuples():
+            try:
+                ticker = f"{ativo.nome}.SA"
+                precos = yf.Ticker(ticker).fast_info.last_price
+                precos_api.append(precos)
+            except Exception as e:
+                print(
+                    "Não foi possível recuperar o preço atuao do ativo. Utilizando o preço médio salvo no banco.")
+                precos_api.append(ativo.preco_medio)
+
+        extrato['preco_mercado_atual'] = precos_api
+        extrato['valor_atual'] = extrato['quantidade'] * \
+            extrato['preco_mercado_atual']
+        extrato['lucro/prejuizo'] = extrato['valor_atual'] - \
+            extrato['total_investido']
+        extrato['rentabilidade_pct'] = (
+            extrato['lucro/prejuizo'] / extrato['total_investido']) * 100
+
+        # # criando a coluna de preço de mercado atual
+        # for ativo in extrato.itertuples():
+        #     try:
+        #         preco_mercado_atual.append(
+        #             yf.Ticker(f"{ativo.nome}.SA").fast_info.last_price)
+        #     except Exception as e:
+        #         print(
+        #             "Não foi possível recuperar o valor atual do ativo. Usando valor médio do banco.")
+        #         preco_mercado_atual.append(ativo.preco_medio)
+
+        # extrato['preco_mercado_atual'] = preco_mercado_atual
+
+        # # criando a coluna de valor atual
+        # for ativo in extrato.itertuples():
+        #     valor_atual.append(ativo.quantidade * ativo.preco_mercado_atual)
+
+        # extrato['valor_atual'] = valor_atual
+
+        # # criando coluna de lucro/prejuizo
+        # for ativo in extrato.itertuples():
+        #     lucro_prejuizo.append(ativo.valor_atual - ativo.total_investido)
+
+        # extrato['lucro/prejuizo'] = lucro_prejuizo
+
+        return extrato
+
 
 gestao = GerenciadorInvestimento()
-# gestao.registra_ativo("PETR4", "Ação")
-# gestao.comprar_ativo("petr4", 10, 10, 5)
-gestao.vender_ativo("PETR4", 2, 2, 3)
+# gestao.registra_ativo("VALE3", "Ação")
+# gestao.comprar_ativo("VALE3", 10, 0)
+# gestao.vender_ativo("PETR4", 2, 0)
+# gestao.extrato_consolidado()
+print(gestao.relatorio_performance())

@@ -33,7 +33,6 @@ if pagina == "Cadastrar Ativo":
 
         if btn_cadastrar:
             if nome:
-                # Aqui pegamos o retorno da função que você deve ajustar no main.py
                 msg = dashboard.registra_ativo(nome, tipo)
                 st.success(msg)
             else:
@@ -59,3 +58,26 @@ if pagina == "Registrar Compra":
                 st.success(msg)
             else:
                 st.error("A quantidade deve ser maior do que 0")
+
+# Página venda ativo
+if pagina == "Registrar Venda":
+    st.title("Registrar Venda")
+    with st.spinner("Carregando"):
+        extrato = dashboard.extrato_consolidado()
+        ativo = st.selectbox(
+            "Ativos", extrato['nome'])
+        if ativo:
+            preco_ativo = dashboard.retorna_preco_ativo(ativo)
+            st.metric(label="BRL", value=preco_ativo)
+            filtro = extrato["nome"] == ativo
+            quantidade_disponivel = extrato.loc[filtro, 'quantidade'].values[0]
+            st.metric("quantidade disponível",
+                      f"{quantidade_disponivel}")
+            quantidade_venda = st.slider("Quantidade:", 0.0, quantidade_disponivel,
+                                         quantidade_disponivel / 2)
+            valor_total = quantidade_venda * preco_ativo
+            st.metric("Total da venda", valor_total)
+            btn_vender = st.button("Registrar venda")
+            if btn_vender:
+                msg = dashboard.vender_ativo(ativo, quantidade_venda, 0)
+                st.success(msg)

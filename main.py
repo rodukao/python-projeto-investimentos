@@ -175,6 +175,7 @@ class GerenciadorInvestimento:
 
                     # salva no banco de dados as atualizações
                     self.conexao.commit()
+                    return "Venda realizada com sucesso!"
 
     def calcula_preco_medio(self, qtd_antiga, precom_antigo, qtd_nova, preco_novo, qtd_total):
         precom_novo = ((qtd_antiga * precom_antigo) +

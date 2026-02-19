@@ -53,6 +53,15 @@ class GerenciadorInvestimento:
         except Exception as e:
             return "Falha ao inserir ativo no banco de dados: ", e
 
+    def retorna_ativos_cadastrados(self):
+        cursor = self.conexao.cursor()
+        res = cursor.execute("SELECT nome FROM ativos")
+        ativos = res.fetchall()
+        return [l[0] for l in ativos]
+
+    def retorna_preco_ativo(self, ativo):
+        return yf.Ticker(f"{ativo}.SA").fast_info.last_price
+
     def comprar_ativo(self, nome_ativo, quantidade, taxas):
 
         # define cursor
@@ -102,6 +111,7 @@ class GerenciadorInvestimento:
 
             # salvamos as alterações no banco de dados
             self.conexao.commit()
+            return "Compra realizada com sucesso!"
 
     def vender_ativo(self, nome_ativo, quantidade, taxas):
 

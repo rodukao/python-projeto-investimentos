@@ -3,6 +3,20 @@ import os
 import sqlite3
 import yfinance as yf
 
+import undetected_chromedriver as uc
+from selenium.webdriver.common.by import By
+
+uc.Chrome.__del__ = lambda self: None
+options = uc.ChromeOptions()
+options.add_argument("--headless")
+options.add_argument("--no-sandbox")
+options.add_argument("--disable-dev-shm-usage")
+
+driver = uc.Chrome(options=options, version_main=144)
+
+url = "https://www.infomoney.com.br/cotacoes/empresas-b3/"
+ativos = []
+
 
 class GerenciadorInvestimento:
     def __init__(self):
@@ -21,14 +35,51 @@ class GerenciadorInvestimento:
     def conecta_banco(self):
         cursor = self.conexao.cursor()
         cursor.execute(
-            "CREATE TABLE IF NOT EXISTS ativos (id INTEGER PRIMARY KEY AUTOINCREMENT, nome TEXT UNIQUE, tipo TEXT CHECK(tipo IN ('Ação', 'Fundo Imobiliário', 'Cripto')))")
+            "CREATE TABLE IF NOT EXISTS ativos (id INTEGER PRIMARY KEY AUTOINCREMENT, nome TEXT UNIQUE)")
         cursor.execute(
             "CREATE TABLE IF NOT EXISTS transacoes (id INTEGER PRIMARY KEY AUTOINCREMENT, data DATETIME DEFAULT (DATETIME('now', 'localtime')), tipo TEXT CHECK(tipo IN ('Compra', 'Venda')), quantidade DECIMAL, preco_pago DECIMAL, taxas DECIMAL, ativo_ref INTEGER REFERENCES ativos(id))")
         cursor.execute(
             "CREATE TABLE IF NOT EXISTS posicao (ativo INTEGER REFERENCES ativos(id), quantidade DECIMAL, preco_medio DECIMAL)")
         self.conexao.commit()
 
-    def registra_ativo(self, nome, tipo):
+    def atualiza_lista_ativos(self):
+        # CONSEGUIMOS BUSCAR OS ATIVOS MAS A FONTE É UM POUCO INSTÁVEL.
+        # TODO VAMOS CHECAR SE O ATIVO A SER INSERIDO ESTÁ DISPONÍVEL NO YFINANCE ANTES DE INSERIR NO BANCO DE DADOS
+        try:
+            driver.get(url)
+            conteudo = driver.find_element(By.CLASS_NAME, "article-content")
+            res_ativos = conteudo.find_elements(By.TAG_NAME, "a")
+            for ativo in res_ativos:
+                ativos.append(ativo.text)
+            # LISTA ATUALIZADA
+            ativos.sort()
+        except Exception as e:
+            return f"Não foi possível atualizar a lista de ativos: {e}"
+
+        # PARA INSERIR NO BANCO PRECISAMOS SUBTRAIR A LISTA QUE JÁ EXISTE LÁ
+        # pegando lista antiga
+        try:
+            cursor = self.conexao.cursor()
+            res_lista_antiga = cursor.execute("SELECT nome FROM ativos")
+            lista_antiga = [l[0] for l in res_lista_antiga.fetchall()]
+
+            # AGORA A GENTE VAI SUBTRAIR A PRIMEIRA LISTA DA SEGUNDA PRA TER SÓ OS ITENS ATUALIZADOS NOVOS
+            lista_atualizada = list(
+                set(ativos) - set(lista_antiga))
+            print(lista_atualizada)
+
+            # INSERIMOS A LISTA NOVA NO BANCO
+            # precisamos transformar a lista em uma lista de tuplas
+            lista_formatada = [(item,) for item in lista_atualizada]
+            cursor.executemany(
+                "INSERT INTO ativos (nome) VALUES (?)", lista_formatada)
+
+            self.conexao.commit()
+            return (f"{len(lista_formatada)} ativos atualizados com sucesso!")
+        except Exception as e:
+            return "Falha na atualização dos ativos"
+
+    def registra_ativo(self, nome):
 
         # define cursor
         cursor = self.conexao.cursor()
@@ -41,7 +92,7 @@ class GerenciadorInvestimento:
             # se não encontrarmos o ativo ele é inserido
             if not res.fetchone():
                 cursor.execute(
-                    "INSERT INTO ativos (nome, tipo) VALUES (?, ?)", (nome, tipo))
+                    "INSERT INTO ativos (nome) VALUES (?)", (nome,))
                 self.conexao.commit()
                 return "Sucesso! Ativo inserido no banco de dados."
 
@@ -55,7 +106,7 @@ class GerenciadorInvestimento:
 
     def retorna_ativos_cadastrados(self):
         cursor = self.conexao.cursor()
-        res = cursor.execute("SELECT nome FROM ativos")
+        res = cursor.execute("SELECT nome FROM ativos ORDER BY nome ASC")
         ativos = res.fetchall()
         return [l[0] for l in ativos]
 
@@ -184,7 +235,7 @@ class GerenciadorInvestimento:
 
     def extrato_consolidado(self):
         df = pd.read_sql_query(
-            "SELECT nome, tipo, quantidade, preco_medio FROM posicao JOIN ativos ON posicao.ativo = ativos.id", self.conexao)
+            "SELECT nome, quantidade, preco_medio FROM posicao JOIN ativos ON posicao.ativo = ativos.id", self.conexao)
         df['total_investido'] = df['quantidade'] * df['preco_medio']
         return (df)
 
@@ -212,11 +263,3 @@ class GerenciadorInvestimento:
             extrato['lucro/prejuizo'] / extrato['total_investido']) * 100
 
         return extrato
-
-
-# gestao = GerenciadorInvestimento()
-# gestao.registra_ativo("ITUB4", "Ação")
-# gestao.comprar_ativo("PETR4", 5, 0)
-# gestao.vender_ativo("PETR4", 2, 0)
-# gestao.extrato_consolidado()
-# gestao.relatorio_performance()

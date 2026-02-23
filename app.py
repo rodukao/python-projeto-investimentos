@@ -26,16 +26,14 @@ if pagina == "Minha Carteira":
         col1, col2 = st.columns(2, gap="medium")
 
         with col1:
-            with st.container(border=True, height="stretch"):
-                st.header("Carteira por ativos")
-                fig = px.pie(dados, values='quantidade', names='nome')
-                st.plotly_chart(fig)
+            st.header("Carteira por ativos")
+            fig = px.pie(dados, values='quantidade', names='nome')
+            st.plotly_chart(fig)
 
         with col2:
-            with st.container(border=True, gap="medium"):
-                st.header("Valorização")
-                fig = px.bar(dados, x='nome', y='rentabilidade_pct')
-                st.plotly_chart(fig)
+            st.header("Valorização")
+            fig = px.bar(dados, x='nome', y='rentabilidade_pct')
+            st.plotly_chart(fig)
 
 
 # Página registrar ativo
